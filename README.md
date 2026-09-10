@@ -1,26 +1,59 @@
 # Jaz Recon
 
-An automated Recon tool for pentest/security (only for **authorized testing**). It takes a target (domain or IP), runs the recon pipeline with well-known tools, and saves results **in real time (streaming)** to `txt` and `json` files inside a timestamped folder.
+> Automated reconnaissance framework for **authorized** penetration testing and security assessments.
+
+Jaz Recon takes a target (domain or IP), runs a full recon pipeline using well-known tools, and
+streams every result to `txt`/`json` files **in real time** inside a timestamped folder.
+
+<p align="left">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-linux%20%7C%20ubuntu-lightgrey.svg">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg">
+  <img alt="Status" src="https://img.shields.io/badge/status-active-brightgreen.svg">
+</p>
+
+---
+
+## Features
+
+- **8-stage recon pipeline** — subdomains, DNS, CDN/WAF detection, ports, HTTP, crawling,
+  vulnerability scanning, and fingerprinting.
+- **Real-time streaming output** — results are appended to files the moment they are discovered,
+  so you can monitor a long scan without waiting for it to finish.
+- **Graceful degradation** — every stage is independent; a missing tool or a failing stage is
+  logged and the pipeline continues.
+- **Automatic tool installation** — missing ProjectDiscovery tools are installed via `go install`
+  and system tools via the OS package manager (disable with `--no-install`).
+- **CDN-aware port scanning** — synthetic CDN edge IPs are skipped by default (`--force-ports`
+  to override).
+- **Colored terminal UI** with live progress and a final summary table.
+- **Per-run artifacts** — a timestamped folder with raw outputs, structured JSON, a full
+  `summary.json`, and a detailed `recon.log`.
+
+---
+
+## Requirements
+
+- **Python 3.9+**
+- **Go** (to install ProjectDiscovery tools — if missing, the installer skips them)
+- **nmap** *(optional)* — used when `--scanner nmap` is selected; auto-installed if possible
+- Linux or Ubuntu (Windows via WSL)
 
 ---
 
 ## Installation
 
-Prerequisites:
-
-- **Python 3.9+**
-- **Go** (to install the ProjectDiscovery tools - if not installed, the installer skips them)
-- **nmap** (optional; if missing, the tool tries to install it via the system package manager)
-
-### 1. Install Python dependencies
-
 ```bash
+git clone https://github.com/Arash-Ghayurian/jaz-recon.git
+cd jaz-recon
+
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
 pip install -r requirements.txt
 ```
 
-### 2. Install external tools
-
-The tool checks during execution and, if a tool is missing, installs it automatically (the `--no-install` flag disables this behavior):
+External tools are installed automatically on first run. To install them manually:
 
 ```bash
 go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
@@ -32,33 +65,32 @@ go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
 go install github.com/projectdiscovery/cdncheck/cmd/cdncheck@latest
 ```
 
-`whatweb` is a system tool and, if missing, the tool installs it with the system package manager (apt/dnf/pacman/brew).
-
-If `GOBIN` is not in PATH, add `$(go env GOPATH)/bin` to PATH.
+> **Tip:** make sure `$(go env GOPATH)/bin` (usually `~/go/bin`) is on your `PATH`.
+> `whatweb` and `nmap` are system packages and are installed with apt/dnf/pacman/brew if missing.
 
 ---
 
 ## Usage
 
-### Simplest case (all steps)
+### Full pipeline on a domain
 
 ```bash
 python recon.py --target example.com
 ```
 
-### Example with a public test target
+### Public test target
 
 ```bash
 python recon.py --target scanme.nmap.org
 ```
 
-### Only a subset of steps
+### Run only selected stages
 
 ```bash
 python recon.py --target example.com --modules subdomains,http,nuclei
 ```
 
-### Choosing a port scanner (nmap more accurate / naabu faster)
+### Use nmap for more accurate port scanning
 
 ```bash
 python recon.py --target example.com --scanner nmap
@@ -70,117 +102,160 @@ python recon.py --target example.com --scanner nmap
 python recon.py --target example.com --severity all
 ```
 
-### Controlling concurrency and timeout
+### Tune concurrency / timeout
 
 ```bash
 python recon.py --target example.com --threads 20 --timeout 600
 ```
 
-### Specifying an output folder
+### Custom output directory
 
 ```bash
 python recon.py --target example.com --output-dir /tmp/out
 ```
 
+### Scan IPs behind a CDN
+
+```bash
+python recon.py --target example.com --force-ports
+```
+
 ---
 
-## Options (CLI)
+## CLI Options
 
 | Flag | Description | Default |
-|------|-------------|---------|
-| `-t, --target` | Target (domain or IP) | Required |
-| `-o, --output-dir` | Base output folder | `./results` |
-| `-m, --modules` | Selected steps (comma-separated) | All |
-| `--scanner` | `nmap` or `naabu` | `naabu` |
-| `--severity` | Nuclei severity filter | `medium,critical` |
-| `--threads` | Max concurrency | `10` |
-| `--timeout` | Timeout for each tool (seconds) | `300` |
-| `--force-ports` | Also scan IPs behind a CDN | Off |
-| `--no-install` | Disable automatic tool installation | Off |
-| `--version` | Show version | - |
+| ------ | ------------- | --------- |
+| `-t, --target` | Target domain or IP address | **required** |
+| `-o, --output-dir` | Base output directory | `./results` |
+| `-m, --modules` | Comma-separated stages to run | all |
+| `--scanner` | Port scanner: `naabu` (fast) or `nmap` (accurate) | `naabu` |
+| `--severity` | Nuclei severity filter (`medium,critical`, `high`, `all`, ...) | `medium,critical` |
+| `--threads` | Max concurrency for parallel stages | `10` |
+| `--timeout` | Per-tool timeout in seconds | `300` |
+| `--force-ports` | Also port-scan IPs behind a CDN/WAF | off |
+| `--no-install` | Do not auto-install missing tools | off |
+| `--version` | Print version and exit | – |
+
+Valid module names: `subdomains`, `dns`, `cdn`, `ports`, `http`, `crawl`, `nuclei`, `whatweb`.
 
 ---
 
 ## Pipeline
 
-| # | Step | Tool | Output |
-|---|------|------|--------|
-| 1 | Subdomain Enumeration | `subfinder` (fallback: crt.sh) | `subdomains.txt` |
-| 2 | DNS Resolution | `dnsx` | `subdomains_ips.json` |
-| 3 | CDN/WAF Detection | `cdncheck` (fallback: headers) | `cdn_status.json` |
-| 4 | Port Scanning | `nmap` or `naabu` | `ports/*` , `all_ports.json` |
-| 5 | HTTP Probing | `httpx` | `http_probe.json` |
-| 6 | Crawling | `katana` | `urls/*` , `all_urls.json` |
-| 7 | Vulnerability Scanning | `nuclei` | `nuclei_results.json` |
-| 8 | WhatWeb Fingerprinting | `whatweb` | `whatweb.json` |
+| # | Stage | Tool | Fallback | Output |
+| --- | ------- | ------ | ---------- | -------- |
+| 1 | Subdomain Enumeration | `subfinder` | `crt.sh` (CT logs) | `subdomains.txt` |
+| 2 | DNS Resolution | `dnsx` | – | `subdomains_ips.json` |
+| 3 | CDN / WAF Detection | `cdncheck` | HTTP headers | `cdn_status.json` |
+| 4 | Port Scanning | `naabu` / `nmap` | – | `ports/`, `all_ports.json` |
+| 5 | HTTP Probing | `httpx` | – | `http_probe.json` |
+| 6 | Crawling | `katana` | – | `urls/`, `all_urls.json` |
+| 7 | Vulnerability Scanning | `nuclei` | – | `nuclei_results.json` |
+| 8 | Fingerprinting | `whatweb` | – | `whatweb.json` |
 
-### Output structure
+Stages run in dependency order and are skipped if their input is unavailable.
+
+---
+
+## Output Structure
 
 ```
 results/example.com_2026-09-07_14-30-00/
-├── subdomains.txt
-├── subdomains_ips.json
-├── cdn_status.json
+├── subdomains.txt          # all discovered subdomains (one per line)
+├── subdomains_ips.json     # {host: [ip, ...]}
+├── cdn_status.json         # {host: {is_cdn, cdn_name}}
 ├── ports/
-│   ├── all_ports.json
-│   └── ports_<ip>.txt
-├── http_probe.json
+│   ├── ports_<ip>.txt      # open ports per IP
+│   └── (raw per-IP results)
+├── all_ports.json          # {ip: [port, ...]}
+├── http_probe.json         # httpx results (status, title, tech, ...)
 ├── urls/
-│   ├── all_urls.json
-│   └── urls_<subdomain>.txt
-├── nuclei_results.json
-├── whatweb.json
-├── summary.json
-└── recon.log
+│   ├── urls_<host>.txt     # crawled URLs per host
+│   └── (raw per-host results)
+├── all_urls.json           # {host: [url, ...]}
+├── nuclei_results.json     # vulnerability findings
+├── whatweb.json            # technology fingerprints
+├── summary.json            # aggregate metrics for the run
+└── recon.log               # full debug log
 ```
 
-Results are written **in real time**: as soon as each subdomain/port/result is discovered, it is appended to the corresponding file immediately.
+### `summary.json` example
+
+```json
+{
+  "target": "example.com",
+  "started": "2026-09-07 14:30:00",
+  "finished": "2026-09-07 14:42:11",
+  "total_subdomains": 37,
+  "resolved_hosts": 31,
+  "cdn_hosts": 6,
+  "open_ports": 18,
+  "http_live": 24,
+  "total_urls_found": 512,
+  "nuclei_findings": 3,
+  "nuclei_by_severity": { "medium": 2, "low": 1 },
+  "output_dir": "results/example.com_2026-09-07_14-30-00"
+}
+```
 
 ---
 
-## Important notes
-
-- **CDN:** By default only real (non-CDN) IPs are port-scanned, since IPs behind a CDN are synthetic. Use `--force-ports` to scan everything.
-- **Fault tolerance:** Each step is independent; if a tool is not installed or a step fails, the next step continues and errors are logged in `recon.log`.
-- **`summary.json`** saves a full summary at the end (subdomain count, open ports, vulnerabilities broken down by severity).
-
----
-
-## Project structure
+## Project Structure
 
 ```
-jaz_recon/
-├── recon.py                       # Main CLI entry / orchestrator
+jaz-recon/
+├── recon.py                  # CLI entry point / argument parsing
 ├── requirements.txt
 ├── README.md
 └── recon/
     ├── __init__.py
-    ├── orchestrator.py            # Pipeline coordinator
+    ├── orchestrator.py       # pipeline coordinator + summary
     ├── utils/
     │   ├── __init__.py
-    │   ├── logger.py              # Logging and colored output (rich)
-    │   ├── helpers.py             # JSON/file helper functions
-    │   ├── runner.py              # Streaming execution via subprocess.Popen
-    │   └── tools.py               # Tool checks and auto-install
+    │   ├── logger.py         # colored logging (rich) + banner
+    │   ├── helpers.py        # JSON / file / target helpers
+    │   ├── runner.py         # streaming subprocess execution
+    │   └── tools.py          # tool detection & auto-install
     └── modules/
         ├── __init__.py
-        ├── subdomains.py          # Step 1
-        ├── dnsx_module.py         # Step 2
-        ├── cdncheck_module.py     # Step 3
-        ├── ports.py               # Step 4
-        ├── httpx_module.py        # Step 5
-        ├── katana_module.py       # Step 6
-        ├── nuclei_module.py       # Step 7
-        └── whatweb_module.py      # Step 8
+        ├── subdomains.py     # 1. subfinder + crt.sh fallback
+        ├── dnsx_module.py    # 2. DNS resolution
+        ├── cdncheck_module.py# 3. CDN / WAF detection
+        ├── ports.py          # 4. naabu / nmap port scan
+        ├── httpx_module.py   # 5. HTTP probing
+        ├── katana_module.py  # 6. crawling
+        ├── nuclei_module.py  # 7. vulnerability scanning
+        └── whatweb_module.py # 8. fingerprinting
 ```
 
 ---
 
-## Real example
+## How Streaming Works
 
-```bash
-pip install -r requirements.txt
-python recon.py --target scanme.nmap.org --scanner nmap
-```
+Every external tool is launched through `recon/utils/runner.py`, which reads the process
+`stdout` line by line and invokes a callback per line. Each module's callback appends the parsed
+result to the relevant file immediately (thread-safe, atomic JSON writes). This means a scan that
+takes hours still produces usable, incrementally updated results.
 
-The final output is saved in `results/scanme.nmap.org_<timestamp>/` and a colored summary is printed in the terminal.
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+| --------- | ----- |
+| `tool not found on PATH: subfinder` | Add `$(go env GOPATH)/bin` to `PATH`, or run without `--no-install`. |
+| Port scan skipped: *"No real (non-CDN) IPs"* | The target is behind a CDN. Use `--force-ports` if you really want to scan edge IPs. |
+| `go install` fails / times out | Check network access, `GOPROXY`, and Go version. Install the tool manually. |
+| System tool install fails | Re-run with `sudo`, or install `nmap` / `whatweb` with your package manager. |
+| `nuclei` finds nothing | Try `--severity all` and make sure templates are updated (`nuclei -update-templates`). |
+| Want more detail | Inspect `recon.log` inside the run folder — it contains full debug output. |
+
+---
+
+## Acknowledgements
+
+Built on top of excellent open-source projects by
+[ProjectDiscovery](https://github.com/projectdiscovery) (subfinder, httpx, naabu, nuclei, katana,
+dnsx, cdncheck), [Nmap](https://nmap.org/), [WhatWeb](https://github.com/urbanadventurer/WhatWeb),
+and [crt.sh](https://crt.sh/).
