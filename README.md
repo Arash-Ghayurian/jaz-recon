@@ -8,7 +8,6 @@ streams every result to `txt`/`json` files **in real time** inside a timestamped
 <p align="left">
   <img alt="Python" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
   <img alt="Platform" src="https://img.shields.io/badge/platform-linux%20%7C%20ubuntu-lightgrey.svg">
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg">
   <img alt="Status" src="https://img.shields.io/badge/status-active-brightgreen.svg">
 </p>
 
