@@ -7,33 +7,36 @@ into the per-run ``recon.log``.
 from __future__ import annotations
 
 import logging
-import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 
 console = Console()
 
+_LEVEL_COLORS = {
+    "DEBUG": "dim",
+    "INFO": "cyan",
+    "WARNING": "yellow",
+    "ERROR": "red",
+    "CRITICAL": "bold red",
+}
 
-class LevelFormatter(logging.Formatter):
-    """Tiny formatter that colorizes the level name."""
 
-    COLORS = {
-        "DEBUG": "dim",
-        "INFO": "cyan",
-        "WARNING": "yellow",
-        "ERROR": "red",
-        "CRITICAL": "bold red",
-    }
+class ConsoleHandler(logging.Handler):
+    """Compact, colored console handler rendered through rich."""
 
-    def format(self, record: logging.LogRecord) -> str:
-        color = self.COLORS.get(record.levelname, "")
-        original = record.levelname
-        record.levelname = f"[{color}]{original}[/{color}]" if color else original
-        out = super().format(record)
-        record.levelname = original
-        return out
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            ts = time.strftime("%H:%M:%S", time.localtime(record.created))
+            color = _LEVEL_COLORS.get(record.levelname, "white")
+            level = f"{record.levelname:<8}"
+            msg = escape(record.getMessage())
+            console.print(f"[dim]{ts}[/dim] | [{color}]{level}[/{color}] | {msg}")
+        except Exception:  # pragma: no cover - defensive
+            self.handleError(record)
 
 
 # Root logger named after the package.
@@ -48,11 +51,8 @@ def setup_logger(log_file: Path | None) -> None:
     for h in list(log.handlers):
         log.removeHandler(h)
 
-    stream = logging.StreamHandler(sys.stderr)
+    stream = ConsoleHandler()
     stream.setLevel(logging.INFO)
-    stream.setFormatter(
-        LevelFormatter("%(asctime)s | %(levelname)-8s | %(message)s", "%H:%M:%S")
-    )
     log.addHandler(stream)
 
     if log_file:
